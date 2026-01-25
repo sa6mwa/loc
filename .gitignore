@@ -1,0 +1,15 @@
+/testdata
+/.testbin
+/.gocache
+\#*\#
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.log
+*.test
+*.out
+*.prof
+vendor/
+.env*

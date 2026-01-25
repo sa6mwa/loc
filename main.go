@@ -1,74 +1,123 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
+	"context"
+	"flag"
 	"os"
-	"path/filepath"
+	"sort"
 	"strings"
+
+	"pkt.systems/loc/internal/engine"
+	"pkt.systems/loc/internal/lang"
+	"pkt.systems/loc/internal/model"
+	"pkt.systems/loc/internal/report"
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: count <ext1> <ext2> ...")
-		os.Exit(1)
+	registry := lang.NewRegistry()
+
+	showHelp := flag.Bool("h", false, "show help")
+	flag.BoolVar(showHelp, "help", false, "show help")
+	flag.Parse()
+
+	if *showHelp {
+		writeHelp(registry)
+		return
 	}
-	exts := os.Args[1:]
-	total := 0
-	// Common dependency / generated / external directories to skip
-	excludedDirs := map[string]bool{
-		"vendor":       true,
-		"node_modules": true,
-		"third_party":  true,
-		".git":         true,
-		".hg":          true,
-		".svn":         true,
-		"dist":         true,
-		"build":        true,
-		"out":          true,
-		"bin":          true,
-		"target":       true,
+
+	req := model.CountRequest{
+		Root:       ".",
+		Extensions: flag.Args(),
 	}
-	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			if excludedDirs[info.Name()] {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		for _, ext := range exts {
-			if strings.HasSuffix(path, ext) {
-				lines, err := countLines(path)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", path, err)
-					return nil
-				}
-				total += lines
-				break
-			}
-		}
-		return nil
-	})
+
+	counter := engine.NewCounter(registry)
+	response, err := counter.Count(context.Background(), req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error walking directory: %v\n", err)
+		writeError(err)
 		os.Exit(1)
 	}
-	fmt.Println(total)
+
+	if err := report.WriteJSON(os.Stdout, response); err != nil {
+		writeError(err)
+		os.Exit(1)
+	}
 }
 
-func countLines(path string) (int, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return 0, err
+func writeHelp(registry *lang.Registry) {
+	extensions := supportedExtensions(registry)
+	lines := wrapWords("  Extensions:", extensions, 80)
+	output := strings.Join([]string{
+		"loc - source code line counter",
+		"",
+		"Usage:",
+		"  loc [flags] [extensions...]",
+		"",
+		"Description:",
+		"  Count source code lines by language, including test code separation.",
+		"",
+		"Extension filters:",
+		"  Passing extensions expands to all extensions for those languages.",
+		"  Example: loc .h includes C and Objective-C sources.",
+		"  Example: loc .m includes MATLAB and Objective-C sources.",
+		"",
+		"Examples:",
+		"  loc",
+		"  loc .go",
+		"  loc .go .c .cpp",
+		"",
+		"Supported extensions:",
+		lines,
+		"",
+	}, "\n")
+	_, _ = os.Stdout.WriteString(output)
+}
+
+func supportedExtensions(registry *lang.Registry) []string {
+	seen := make(map[string]bool)
+	var exts []string
+	for _, language := range registry.Languages() {
+		for _, ext := range language.Extensions {
+			norm := lang.NormalizeExtension(ext)
+			if seen[norm] {
+				continue
+			}
+			seen[norm] = true
+			exts = append(exts, norm)
+		}
 	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	lines := 0
-	for scanner.Scan() {
-		lines++
+	sort.Strings(exts)
+	return exts
+}
+
+func writeError(err error) {
+	detail := strings.TrimSpace(err.Error())
+	payload := report.ErrorResponse{
+		Error: report.ErrorDetail{
+			Message: "loc failed",
+			Detail:  detail,
+		},
 	}
-	return lines, scanner.Err()
+	_ = report.WriteJSON(os.Stderr, payload)
+}
+
+func wrapWords(prefix string, words []string, width int) string {
+	if width <= len(prefix)+1 || len(words) == 0 {
+		return prefix + " " + strings.Join(words, " ")
+	}
+	lines := make([]string, 0, 4)
+	current := prefix
+	lineLen := len(prefix)
+	for _, word := range words {
+		needed := len(word) + 1
+		if lineLen+needed > width {
+			lines = append(lines, current)
+			current = strings.Repeat(" ", len(prefix)) + word
+			lineLen = len(current)
+			continue
+		}
+		current += " " + word
+		lineLen += needed
+	}
+	lines = append(lines, current)
+	return strings.Join(lines, "\n")
 }
