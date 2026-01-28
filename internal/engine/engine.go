@@ -31,10 +31,7 @@ func (c *counter) Count(ctx context.Context, req model.CountRequest) (model.Coun
 	if err := ctx.Err(); err != nil {
 		return model.CountResponse{}, err
 	}
-	root := req.Root
-	if strings.TrimSpace(root) == "" {
-		root = "."
-	}
+	roots := normalizeRoots(req)
 
 	normalizedExts, err := c.normalizeExtensions(req.Extensions)
 	if err != nil {
@@ -49,9 +46,13 @@ func (c *counter) Count(ctx context.Context, req model.CountRequest) (model.Coun
 		}
 	}
 
-	entries, err := scan.Walk(root, c.registry, normalizedExts, excluded)
-	if err != nil {
-		return model.CountResponse{}, err
+	var entries []scan.FileEntry
+	for _, root := range roots {
+		rootEntries, err := scan.Walk(root, c.registry, normalizedExts, excluded)
+		if err != nil {
+			return model.CountResponse{}, err
+		}
+		entries = append(entries, rootEntries...)
 	}
 	return count.Aggregate(entries)
 }
@@ -95,4 +96,26 @@ func (c *counter) normalizeExtensions(exts []string) ([]string, error) {
 	}
 	sort.Strings(normalized)
 	return normalized, nil
+}
+
+func normalizeRoots(req model.CountRequest) []string {
+	if len(req.Roots) > 0 {
+		roots := make([]string, 0, len(req.Roots))
+		for _, root := range req.Roots {
+			trimmed := strings.TrimSpace(root)
+			if trimmed == "" {
+				continue
+			}
+			roots = append(roots, trimmed)
+		}
+		if len(roots) > 0 {
+			return roots
+		}
+		return []string{"."}
+	}
+	root := strings.TrimSpace(req.Root)
+	if root == "" {
+		root = "."
+	}
+	return []string{root}
 }

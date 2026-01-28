@@ -2,6 +2,7 @@ package model
 
 // CountRequest describes a counting request.
 type CountRequest struct {
+	Roots        []string
 	Root         string
 	Extensions   []string
 	ExcludedDirs []string

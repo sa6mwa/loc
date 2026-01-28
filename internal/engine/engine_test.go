@@ -473,6 +473,39 @@ func TestCountCustomExcludedDirs(t *testing.T) {
 	}
 }
 
+func TestCountMultipleRootsAggregates(t *testing.T) {
+	rootA := makeTempRoot(t)
+	rootB := makeTempRoot(t)
+	writeFile(t, filepath.Join(rootA, "main.go"), "package main\nfunc main() {}\n")
+	writeFile(t, filepath.Join(rootB, "main_test.go"), "package main\nfunc TestA(t *T) {}\n")
+
+	registry := lang.NewRegistry()
+	counter := NewCounter(registry)
+
+	resp, err := counter.Count(context.Background(), model.CountRequest{
+		Roots: []string{rootA, rootB},
+	})
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	stats, ok := resp.Languages["go"]
+	if !ok {
+		t.Fatalf("expected go stats")
+	}
+	if stats.LOC != 4 || stats.TestLOC != 2 || stats.CodeLOC != 2 {
+		t.Fatalf("unexpected go stats: %+v", stats)
+	}
+	if resp.LOC != 4 || resp.TestLOC != 2 || resp.CodeLOC != 2 {
+		t.Fatalf("unexpected total stats: %+v", resp)
+	}
+	if resp.PercentTestLOC == nil || resp.PercentCodeLOC == nil {
+		t.Fatalf("expected total percent locs")
+	}
+	if !floatEqual(*resp.PercentTestLOC, 50) || !floatEqual(*resp.PercentCodeLOC, 50) {
+		t.Fatalf("unexpected total percents: got %v/%v", *resp.PercentTestLOC, *resp.PercentCodeLOC)
+	}
+}
+
 func TestCountContextCanceled(t *testing.T) {
 	registry := lang.NewRegistry()
 	counter := NewCounter(registry)

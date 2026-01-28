@@ -2,6 +2,16 @@
 
 `loc` scans the current directory tree and reports lines of code by language, separating test code from non-test code and emitting pretty JSON via `prettyx`.
 
+### Install
+
+```
+go build -o bin/loc -trimpath -ldflags="-s -w" .
+sudo install bin/loc /usr/local/bin/
+
+# or...
+go install pkt.systems/loc@latest
+```
+
 ### Usage
 
 ```
@@ -10,6 +20,7 @@ loc [flags] [extensions...]
 
 By default, `loc` scans the current working directory and counts all supported
 languages. Providing extensions limits the scan to those languages.
+Use `-d` multiple times to scan and aggregate multiple directories.
 
 Examples:
 
@@ -17,6 +28,7 @@ Examples:
 loc
 loc .go
 loc .go .c .cpp
+loc -d proj1 -d proj2
 ```
 
 ### Extension filters
@@ -89,13 +101,3 @@ Tests are detected using common, deterministic conventions:
 - Lua: `spec/` or `*_spec.lua`; counts `describe`/`it`.
 - R: `tests/` or `testthat/`; counts `test_that(`.
 - MATLAB: `tests/` or `*_test.m`; no test counts.
-
-### Install
-
-```
-go build -o bin/loc -trimpath -ldflags="-s -w" .
-sudo install bin/loc /usr/local/bin/
-
-# or...
-go install pkt.systems/loc@latest
-```

@@ -18,6 +18,8 @@ func main() {
 
 	showHelp := flag.Bool("h", false, "show help")
 	flag.BoolVar(showHelp, "help", false, "show help")
+	var dirs stringList
+	flag.Var(&dirs, "d", "directory to scan (repeatable)")
 	flag.Parse()
 
 	if *showHelp {
@@ -26,6 +28,7 @@ func main() {
 	}
 
 	req := model.CountRequest{
+		Roots:      []string(dirs),
 		Root:       ".",
 		Extensions: flag.Args(),
 	}
@@ -52,6 +55,9 @@ func writeHelp(registry *lang.Registry) {
 		"Usage:",
 		"  loc [flags] [extensions...]",
 		"",
+		"Flags:",
+		"  -d DIR  Scan directory (repeatable). Defaults to current directory.",
+		"",
 		"Description:",
 		"  Count source code lines by language, including test code separation.",
 		"",
@@ -64,6 +70,7 @@ func writeHelp(registry *lang.Registry) {
 		"  loc",
 		"  loc .go",
 		"  loc .go .c .cpp",
+		"  loc -d proj1 -d proj2",
 		"",
 		"Supported extensions:",
 		lines,
@@ -98,6 +105,20 @@ func writeError(err error) {
 		},
 	}
 	_ = report.WriteJSON(os.Stderr, payload)
+}
+
+type stringList []string
+
+func (s *stringList) String() string {
+	if s == nil {
+		return ""
+	}
+	return strings.Join(*s, ",")
+}
+
+func (s *stringList) Set(value string) error {
+	*s = append(*s, value)
+	return nil
 }
 
 func wrapWords(prefix string, words []string, width int) string {
