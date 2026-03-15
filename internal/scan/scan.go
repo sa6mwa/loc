@@ -33,6 +33,7 @@ type FileEntry struct {
 
 // Walk finds source files under root for the given registry and extension filter.
 func Walk(root string, registry *lang.Registry, extensions []string, excludedDirs map[string]bool) ([]FileEntry, error) {
+	root = filepath.Clean(root)
 	allowed := make(map[string]bool)
 	if len(extensions) > 0 {
 		for _, ext := range extensions {
@@ -41,6 +42,11 @@ func Walk(root string, registry *lang.Registry, extensions []string, excludedDir
 	}
 	if excludedDirs == nil {
 		excludedDirs = DefaultExcludedDirs
+	}
+
+	ignoreMatcher, err := newGitIgnoreMatcher(root)
+	if err != nil {
+		return nil, err
 	}
 
 	entries := make([]FileEntry, 0, 128)
@@ -53,6 +59,22 @@ func Walk(root string, registry *lang.Registry, extensions []string, excludedDir
 			if excludedDirs[name] {
 				return filepath.SkipDir
 			}
+			if path != root {
+				ignored, err := matchesGitIgnore(root, path, true, ignoreMatcher)
+				if err != nil {
+					return err
+				}
+				if ignored {
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+		ignored, err := matchesGitIgnore(root, path, false, ignoreMatcher)
+		if err != nil {
+			return err
+		}
+		if ignored {
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(name))

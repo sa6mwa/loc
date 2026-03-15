@@ -70,6 +70,56 @@ func TestWalkFiltersAndExcludes(t *testing.T) {
 	}
 }
 
+func TestWalkHonorsGitIgnore(t *testing.T) {
+	root := makeTempRoot(t)
+
+	writeFile(t, filepath.Join(root, ".gitignore"), ".cache/\nignored.go\nnested/skip.py\n")
+	writeFile(t, filepath.Join(root, "main.go"), "package main\n")
+	writeFile(t, filepath.Join(root, "ignored.go"), "package ignored\n")
+	writeFile(t, filepath.Join(root, ".cache", "generated.py"), "def f():\n    pass\n")
+	writeFile(t, filepath.Join(root, "nested", ".gitignore"), "ignored.ts\n")
+	writeFile(t, filepath.Join(root, "nested", "main.py"), "def f():\n    pass\n")
+	writeFile(t, filepath.Join(root, "nested", "skip.py"), "def f():\n    pass\n")
+	writeFile(t, filepath.Join(root, "nested", "ignored.ts"), "export const x = 1\n")
+
+	registry := lang.NewRegistry()
+	entries, err := Walk(root, registry, nil, nil)
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
+
+	got := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		rel, err := filepath.Rel(root, entry.Path)
+		if err != nil {
+			t.Fatalf("rel: %v", err)
+		}
+		got[filepath.ToSlash(rel)] = true
+	}
+
+	wantPresent := []string{
+		"main.go",
+		"nested/main.py",
+	}
+	for _, path := range wantPresent {
+		if !got[path] {
+			t.Fatalf("expected %s to be scanned", path)
+		}
+	}
+
+	wantAbsent := []string{
+		"ignored.go",
+		".cache/generated.py",
+		"nested/skip.py",
+		"nested/ignored.ts",
+	}
+	for _, path := range wantAbsent {
+		if got[path] {
+			t.Fatalf("expected %s to be excluded by .gitignore", path)
+		}
+	}
+}
+
 func makeTempRoot(t *testing.T) string {
 	t.Helper()
 	base := filepath.Join(os.TempDir(), "test.loc.pkt.systems")
@@ -84,4 +134,14 @@ func makeTempRoot(t *testing.T) string {
 		_ = os.RemoveAll(root)
 	})
 	return root
+}
+
+func writeFile(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
 }

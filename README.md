@@ -21,6 +21,7 @@ loc [flags] [extensions...]
 By default, `loc` scans the current working directory and counts all supported
 languages. Providing extensions limits the scan to those languages.
 Use `-d` multiple times to scan and aggregate multiple directories.
+Repository-local `.gitignore` files are honored while scanning.
 
 Examples:
 
